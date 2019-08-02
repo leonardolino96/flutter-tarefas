@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as prefix0;
 import 'package:path_provider/path_provider.dart';
 
 void main() {
@@ -24,23 +25,51 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    _readData().then((data) {
+      setState(() {
+        _tarefas = json.decode(data);
+      });
+    });
+  }
+
   final _tarefaController = TextEditingController();
-  ScrollController _scrollController = new ScrollController();
 
   List _tarefas = [];
+  Map<String, dynamic> _ultimaRemovida;
+  int _ultimaRemovidaIndex;
 
   void _addTarefa() {
+    if (_tarefaController.text.isNotEmpty) {
+      setState(() {
+        Map<String, dynamic> novaTarefa = Map();
+        novaTarefa["title"] = _tarefaController.text;
+        novaTarefa["ok"] = false;
+        _tarefaController.clear();
+        _tarefas.add(novaTarefa);
+        _saveData();
+      });
+    }
+  }
+
+  Future<Null> _refresh() async {
+    await Future.delayed(Duration(seconds: 1));
+
     setState(() {
-      Map<String, dynamic> novaTarefa = Map();
-      novaTarefa["title"] = _tarefaController.text;
-      novaTarefa["ok"] = false;
-      _tarefaController.clear();
-      _tarefas.add(novaTarefa);
-      _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent + 56,
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeOut);
+      _tarefas.sort((a, b) {
+        if (a["ok"] && !b["ok"])
+          return 1;
+        else if (!a["ok"] && b["ok"])
+          return -1;
+        else
+          return 0;
+      });
+
+      _saveData();
     });
+    return null;
   }
 
   @override
@@ -50,29 +79,13 @@ class _HomePageState extends State<HomePage> {
         title: Text("Lista de tarefas"),
       ),
       body: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
         children: <Widget>[
           Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              itemCount: _tarefas.length,
-              itemBuilder: (context, index) {
-                return CheckboxListTile(
-                  title: Text(_tarefas[index]["title"]),
-                  value: _tarefas[index]["ok"],
-                  secondary: CircleAvatar(
-                    backgroundColor:
-                        _tarefas[index]["ok"] ? Colors.green : Colors.indigo,
-                    child: Icon(
-                        _tarefas[index]["ok"] ? Icons.done : Icons.short_text,
-                        color: Colors.white),
-                  ),
-                  onChanged: (check) {
-                    setState(() {
-                      _tarefas[index]["ok"] = check;
-                    });
-                  },
-                );
-              },
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView.builder(
+                  itemCount: _tarefas.length, itemBuilder: buidItem),
             ),
           ),
           Card(
@@ -95,7 +108,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   SizedBox(width: 8),
                   OutlineButton(
-                    child: Text("Adicionar"),
+                    child: Text("Adicionar", style: TextStyle(color: Colors.indigo)),
                     onPressed: _addTarefa,
                   )
                 ],
@@ -129,5 +142,52 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       return null;
     }
+  }
+
+  Widget buidItem(context, index) {
+    return Dismissible(
+      key: ObjectKey(_tarefas[index]),
+      direction: DismissDirection.startToEnd,
+      background: Container(color: Colors.red),
+      onDismissed: (direction) {
+        setState(() {
+          _ultimaRemovida = Map.from(_tarefas[index]);
+          _ultimaRemovidaIndex = index;
+          _tarefas.removeAt(index);
+          _saveData();
+          final snack = SnackBar(
+            content: Text("Tarefa \"${_ultimaRemovida["title"]}\" removida"),
+            action: SnackBarAction(
+              label: "Desfazer",
+              onPressed: () {
+                setState(() {
+                  _tarefas.insert(_ultimaRemovidaIndex, _ultimaRemovida);
+                  _saveData();
+                });
+              },
+            ),
+            duration: Duration(seconds: 3),
+          );
+
+          Scaffold.of(context).removeCurrentSnackBar();
+          Scaffold.of(context).showSnackBar(snack);
+        });
+      },
+      child: CheckboxListTile(
+        title: Text(_tarefas[index]["title"]),
+        value: _tarefas[index]["ok"],
+        secondary: CircleAvatar(
+          backgroundColor: _tarefas[index]["ok"] ? Colors.green : Colors.indigo,
+          child: Icon(_tarefas[index]["ok"] ? Icons.done : Icons.short_text,
+              color: Colors.white),
+        ),
+        onChanged: (check) {
+          setState(() {
+            _tarefas[index]["ok"] = check;
+            _saveData();
+          });
+        },
+      ),
+    );
   }
 }
