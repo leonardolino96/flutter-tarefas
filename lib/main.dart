@@ -14,6 +14,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: "Tarefas",
       theme: ThemeData(primarySwatch: Colors.indigo),
+      darkTheme: ThemeData.dark(),
       home: HomePage(),
     );
   }
